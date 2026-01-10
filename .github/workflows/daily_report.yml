@@ -2,7 +2,7 @@ name: Odoo Daily Sales Report
 
 on:
   schedule:
-    - cron: "48 9 * * *"  # 7:00 PM IST
+    - cron: "45 12 * * *"  # 6:15 PM IST
   workflow_dispatch:
 
 jobs:
