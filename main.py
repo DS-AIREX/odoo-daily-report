@@ -9,7 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 # ========================
-# LOAD SECRETS FROM GITHUB
+# LOAD SECRETS
 # ========================
 ODOO_URL = os.environ["ODOO_URL"]
 ODOO_DB = os.environ["ODOO_DB"]
@@ -39,8 +39,22 @@ def get_daily_activities():
     ist = pytz.timezone("Asia/Kolkata")
     today = datetime.now(ist).date()
 
-    start_utc = ist.localize(datetime.combine(today, datetime.min.time())).astimezone(pytz.utc)
-    end_utc = ist.localize(datetime.combine(today, datetime.max.time())).astimezone(pytz.utc)
+    start_utc = ist.localize(
+        datetime.combine(today, datetime.min.time())
+    ).astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    end_utc = ist.localize(
+        datetime.combine(today, datetime.max.time())
+    ).astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    # Check if date_done field exists
+    fields = models.execute_kw(
+        ODOO_DB, uid, ODOO_PASSWORD,
+        "mail.activity", "fields_get",
+        [], {"attributes": ["type"]}
+    )
+
+    date_field = "date_done" if "date_done" in fields else "write_date"
 
     activities = models.execute_kw(
         ODOO_DB, uid, ODOO_PASSWORD,
@@ -48,8 +62,8 @@ def get_daily_activities():
         [[
             ["res_model", "=", "crm.lead"],
             ["state", "=", "done"],
-            ["write_date", ">=", start_utc.strftime("%Y-%m-%d %H:%M:%S")],
-            ["write_date", "<=", end_utc.strftime("%Y-%m-%d %H:%M:%S")]
+            [date_field, ">=", start_utc],
+            [date_field, "<=", end_utc],
         ]],
         {"fields": ["user_id"], "limit": 2000}
     )
@@ -59,9 +73,12 @@ def get_daily_activities():
         if act["user_id"]:
             counter[act["user_id"][1]] += 1
 
-    return pd.DataFrame(
-        [{"Sales Person": k, "Activities": v} for k, v in counter.items()]
-    ).sort_values("Activities", ascending=False)
+    return (
+        pd.DataFrame(
+            [{"Sales Person": k, "Activities": v} for k, v in counter.items()]
+        )
+        .sort_values("Activities", ascending=False)
+    )
 
 # ========================
 # SEND EMAIL
@@ -97,6 +114,7 @@ def send_email(df):
 # RUN
 # ========================
 df = get_daily_activities()
+
 if df.empty:
     print("⚠️ No activities found today")
 else:
